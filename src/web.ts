@@ -1,15 +1,26 @@
 import { WebPlugin } from '@capacitor/core';
 
-import type { LocationForegroundServicePlugin } from './definitions';
+import type {
+  IsTrackingResult,
+  LocationForegroundServicePlugin,
+  StartTrackingOptions,
+  StartTrackingResult,
+  StopTrackingResult,
+} from './definitions';
 
 export class LocationForegroundServiceWeb extends WebPlugin implements LocationForegroundServicePlugin {
-  async echo(options: { value: string }): Promise<{ value: string }> {
-    console.log('ECHO', options);
-    return options;
+  /**
+   * La plataforma web no implementa rastreo persistente; se notifica al desarrollador.
+   */
+  async startTracking(_options: StartTrackingOptions): Promise<StartTrackingResult> {
+    throw this.unimplemented('El servicio de ubicación persistente no está disponible en web.');
   }
 
-  async print(options: {value: string}): Promise<{ value: string }> {
-    console.log('PRINT', options);
-    return options;
+  async stopTracking(): Promise<StopTrackingResult> {
+    throw this.unimplemented('El servicio de ubicación persistente no está disponible en web.');
+  }
+
+  async isTracking(): Promise<IsTrackingResult> {
+    return { running: false };
   }
 }

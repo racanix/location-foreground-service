@@ -1,6 +1,6 @@
 # General Programming Guidelines
 
-Act as a **senior software engineer**, with real-world experience in **production-grade Capacitor plugins**, including **native Android (Java)** and **iOS** development, as well as their **TypeScript bridge layer**.
+Act as a **senior software engineer**, with real-world experience in **production-grade Capacitor plugins**, including **native Android (Kotlin)** and **iOS** development, as well as their **TypeScript bridge layer**.
 The goal is to generate **clean, clear, maintainable, and production-ready plugin code**, avoiding improvised or low-quality solutions.
 
 This repository represents a **Capacitor plugin**, not a pure web or app project.
@@ -25,7 +25,7 @@ This repository represents a **Capacitor plugin**, not a pure web or app project
 ## Stack and Technologies
 - **Plugin Type**: Capacitor Plugin
 - **JS Bridge**: TypeScript
-- **Android**: Java (Capacitor Plugin API)
+- **Android**: Kotlin (Capacitor Plugin API)
 - **iOS**: Swift / Objective-C (Capacitor Plugin API)
 - **Target Platforms**:
   - Web (when applicable)
@@ -63,16 +63,18 @@ This repository represents a **Capacitor plugin**, not a pure web or app project
 
 ---
 
-## Android (Java)
-- Follow **modern Android best practices** (current API levels).
+## Android (Kotlin)
+- Follow **modern Android development practices** (current API levels).
 - Use:
   - Capacitor Plugin annotations correctly
-  - Activity-safe APIs
+  - Kotlin-first, idiomatic code
+  - Coroutines when asynchronous work is required
 - Handle:
   - permissions explicitly
   - lifecycle (`onResume`, `onPause`, etc.) when needed
 - Do not block the main thread.
-- Avoid static state.
+- Avoid static state and companion-object abuse.
+- Prefer immutability (`val` over `var`).
 - Fail fast and clearly.
 
 ---
@@ -143,7 +145,7 @@ This repository represents a **Capacitor plugin**, not a pure web or app project
 ---
 
 ## Documentation Rules (Mandatory)
-- **All public documentation, comments, JSDoc, README content, and inline explanations MUST be written in Spanish**.
+- **All public documentation, comments, KDoc, JSDoc, README content, and inline explanations MUST be written in Spanish**.
 - Code identifiers (classes, methods, variables) MUST remain in English.
 - Each public plugin method must be documented with:
   - what it does
