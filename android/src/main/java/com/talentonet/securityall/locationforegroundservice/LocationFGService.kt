@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -48,6 +49,7 @@ class LocationFGService : Service() {
     private var currentConfig: TrackingOptions? = null
     private var flushJob: Job? = null
     private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
+    private val arrivalTriggered = AtomicBoolean(false)
     private val httpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -93,6 +95,8 @@ class LocationFGService : Service() {
             return
         }
 
+        arrivalTriggered.set(false)
+
         val headers = readSerializableMap(intent, EXTRA_HEADERS)
         val metadata = readSerializableMap(intent, EXTRA_METADATA)
         val minInterval = intent.getLongExtra(EXTRA_MIN_INTERVAL, DEFAULT_MIN_INTERVAL)
@@ -103,6 +107,14 @@ class LocationFGService : Service() {
         val retryDelay = intent.getLongExtra(EXTRA_RETRY_DELAY, DEFAULT_RETRY_DELAY)
         val queueCapacity = max(intent.getIntExtra(EXTRA_QUEUE_CAPACITY, DEFAULT_QUEUE_CAPACITY), 1)
         val accuracy = intent.getStringExtra(EXTRA_ACCURACY)?.let { runCatching { LocationAccuracy.valueOf(it) }.getOrNull() } ?: LocationAccuracy.HIGH
+        val targetLat = intent.getDoubleExtra(EXTRA_TARGET_LAT, Double.NaN)
+        val targetLng = intent.getDoubleExtra(EXTRA_TARGET_LNG, Double.NaN)
+        val targetRange = intent.getDoubleExtra(EXTRA_TARGET_RANGE, DEFAULT_TARGET_RANGE)
+        val targetLocation = if (!targetLat.isNaN() && !targetLng.isNaN()) {
+            TargetLocation(targetLat, targetLng, targetRange)
+        } else {
+            null
+        }
 
         val config = TrackingOptions(
             endpoint = endpoint,
@@ -116,6 +128,7 @@ class LocationFGService : Service() {
             retryDelayMillis = retryDelay,
             queueCapacity = queueCapacity,
             accuracy = accuracy,
+            targetLocation = targetLocation,
         )
 
         currentConfig = config
@@ -140,6 +153,11 @@ class LocationFGService : Service() {
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.locations.forEach { location ->
+                    val target = currentConfig?.targetLocation
+                    if (target != null && hasReachedTarget(location, target)) {
+                        handleArrival()
+                        return
+                    }
                     val payload = LocationPayload(
                         latitude = location.latitude,
                         longitude = location.longitude,
@@ -156,6 +174,26 @@ class LocationFGService : Service() {
 
         fusedClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
         locationCallback = callback
+    }
+
+    private fun hasReachedTarget(current: Location, target: TargetLocation): Boolean {
+        val distance = FloatArray(1)
+        Location.distanceBetween(
+            current.latitude,
+            current.longitude,
+            target.latitude,
+            target.longitude,
+            distance,
+        )
+        return distance.first().toDouble() <= target.rangeMeters
+    }
+
+    private fun handleArrival() {
+        if (!arrivalTriggered.compareAndSet(false, true)) {
+            return
+        }
+        showArrivalAlert()
+        stopSelf()
     }
 
     private fun stopLocationUpdates() {
@@ -248,7 +286,13 @@ class LocationFGService : Service() {
             CHANNEL_NAME,
             NotificationManager.IMPORTANCE_LOW,
         )
+        val alertChannel = NotificationChannel(
+            ALERT_CHANNEL_ID,
+            ALERT_CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_DEFAULT,
+        )
         notificationManager.createNotificationChannel(channel)
+        notificationManager.createNotificationChannel(alertChannel)
     }
 
     private fun buildNotification(content: String, title: String): Notification {
@@ -265,6 +309,17 @@ class LocationFGService : Service() {
         val resolvedTitle = title ?: currentConfig?.notificationTitle ?: DEFAULT_NOTIFICATION_TITLE
         val notification = buildNotification(content, resolvedTitle)
         notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun showArrivalAlert() {
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setContentTitle("Destino alcanzado")
+            .setContentText("Haz llegado a tu destino")
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        notificationManager.notify(ARRIVAL_NOTIFICATION_ID, notification)
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -292,7 +347,10 @@ class LocationFGService : Service() {
         private const val TAG = "LocationFGService"
         private const val CHANNEL_ID = "securityall_location_channel"
         private const val CHANNEL_NAME = "Ubicación en segundo plano"
+        private const val ALERT_CHANNEL_ID = "securityall_location_alerts"
+        private const val ALERT_CHANNEL_NAME = "Alertas de ubicación"
         private const val NOTIFICATION_ID = 90421
+        private const val ARRIVAL_NOTIFICATION_ID = 90422
         private const val DEFAULT_NOTIFICATION_TITLE = "Ubicación activa"
         private const val DEFAULT_NOTIFICATION_BODY = "Compartiendo tu ubicación"
         private const val JSON_MEDIA = "application/json; charset=utf-8"
@@ -315,12 +373,16 @@ class LocationFGService : Service() {
         const val EXTRA_RETRY_DELAY = "extra_retry_delay"
         const val EXTRA_QUEUE_CAPACITY = "extra_queue_capacity"
         const val EXTRA_ACCURACY = "extra_accuracy"
+        const val EXTRA_TARGET_LAT = "extra_target_lat"
+        const val EXTRA_TARGET_LNG = "extra_target_lng"
+        const val EXTRA_TARGET_RANGE = "extra_target_range"
 
         const val DEFAULT_MIN_INTERVAL = 10_000L
         const val DEFAULT_FASTEST_INTERVAL = 5_000L
         const val DEFAULT_MIN_DISTANCE = 5f
         const val DEFAULT_RETRY_DELAY = 5_000L
         const val DEFAULT_QUEUE_CAPACITY = 32
+        const val DEFAULT_TARGET_RANGE = 10.0
 
         fun isRunning(): Boolean = running.get()
     }

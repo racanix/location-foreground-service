@@ -84,19 +84,31 @@ Estado mínimo devuelto por los métodos públicos del plugin.
 Configuración requerida para iniciar el servicio nativo de rastreo.
 Todas las propiedades son multiplataforma y deben mantenerse sincronizadas con Android/iOS.
 
-| Prop                          | Type                                                            | Description                                                                          |
-| ----------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **`endpoint`**                | <code>string</code>                                             | URL absoluta del endpoint que recibirá las posiciones.                               |
-| **`headers`**                 | <code><a href="#record">Record</a>&lt;string, string&gt;</code> | Encabezados adicionales enviados en cada petición HTTP.                              |
-| **`metadata`**                | <code><a href="#record">Record</a>&lt;string, string&gt;</code> | Datos estáticos adjuntos a cada payload (por ejemplo, ids de usuario o dispositivo). |
-| **`minUpdateIntervalMillis`** | <code>number</code>                                             | Intervalo deseado entre lecturas (ms). Valor por defecto: 10000.                     |
-| **`fastestIntervalMillis`**   | <code>number</code>                                             | Intervalo mínimo absoluto aceptado por el servicio (ms). Valor por defecto: 5000.    |
-| **`minUpdateDistanceMeters`** | <code>number</code>                                             | Distancia mínima en metros para disparar un nuevo evento. Valor por defecto: 5.      |
-| **`notificationTitle`**       | <code>string</code>                                             | Texto mostrado como título de la notificación persistente.                           |
-| **`notificationBody`**        | <code>string</code>                                             | Texto mostrado como cuerpo de la notificación persistente.                           |
-| **`retryDelayMillis`**        | <code>number</code>                                             | Tiempo de espera antes de reintentar envíos fallidos (ms). Valor por defecto: 5000.  |
-| **`queueCapacity`**           | <code>number</code>                                             | Capacidad máxima de la cola en memoria. Valor por defecto: 32.                       |
-| **`accuracy`**                | <code><a href="#locationaccuracy">LocationAccuracy</a></code>   | Prioridad deseada para el proveedor de ubicación.                                    |
+| Prop                          | Type                                                            | Description                                                                                               |
+| ----------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **`endpoint`**                | <code>string</code>                                             | URL absoluta del endpoint que recibirá las posiciones.                                                    |
+| **`headers`**                 | <code><a href="#record">Record</a>&lt;string, string&gt;</code> | Encabezados adicionales enviados en cada petición HTTP.                                                   |
+| **`metadata`**                | <code><a href="#record">Record</a>&lt;string, string&gt;</code> | Datos estáticos adjuntos a cada payload (por ejemplo, ids de usuario o dispositivo).                      |
+| **`minUpdateIntervalMillis`** | <code>number</code>                                             | Intervalo deseado entre lecturas (ms). Valor por defecto: 10000.                                          |
+| **`fastestIntervalMillis`**   | <code>number</code>                                             | Intervalo mínimo absoluto aceptado por el servicio (ms). Valor por defecto: 5000.                         |
+| **`minUpdateDistanceMeters`** | <code>number</code>                                             | Distancia mínima en metros para disparar un nuevo evento. Valor por defecto: 5.                           |
+| **`notificationTitle`**       | <code>string</code>                                             | Texto mostrado como título de la notificación persistente.                                                |
+| **`notificationBody`**        | <code>string</code>                                             | Texto mostrado como cuerpo de la notificación persistente.                                                |
+| **`retryDelayMillis`**        | <code>number</code>                                             | Tiempo de espera antes de reintentar envíos fallidos (ms). Valor por defecto: 5000.                       |
+| **`queueCapacity`**           | <code>number</code>                                             | Capacidad máxima de la cola en memoria. Valor por defecto: 32.                                            |
+| **`accuracy`**                | <code><a href="#locationaccuracy">LocationAccuracy</a></code>   | Prioridad deseada para el proveedor de ubicación.                                                         |
+| **`targetLocation`**          | <code><a href="#targetlocation">TargetLocation</a></code>       | Ubicación objetivo opcional. Al llegar dentro del rango se mostrará una alerta y el servicio se detendrá. |
+
+
+#### TargetLocation
+
+Ubicación objetivo para detener el servicio cuando el usuario llegue al destino.
+
+| Prop            | Type                | Description                                                     |
+| --------------- | ------------------- | --------------------------------------------------------------- |
+| **`latitude`**  | <code>number</code> | Latitud del destino.                                            |
+| **`longitude`** | <code>number</code> | Longitud del destino.                                           |
+| **`range`**     | <code>number</code> | Rango en metros para considerar llegada. Valor por defecto: 10. |
 
 
 ### Type Aliases
@@ -106,7 +118,9 @@ Todas las propiedades son multiplataforma y deben mantenerse sincronizadas con A
 
 Construct a type with a set of properties K of type T
 
-<code>{ [P in K]: T; }</code>
+<code>{
+ [P in K]: T;
+ }</code>
 
 
 #### LocationAccuracy

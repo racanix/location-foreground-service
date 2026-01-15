@@ -63,6 +63,7 @@ class LocationForegroundServicePlugin : Plugin() {
             ?: throw IllegalArgumentException("Debes proporcionar un endpoint válido")
         val headers = getObject("headers")?.toMap() ?: emptyMap()
         val metadata = getObject("metadata")?.toMap() ?: emptyMap()
+        val targetLocation = readTargetLocation()
         val minInterval = getDouble("minUpdateIntervalMillis")?.toLong() ?: LocationFGService.DEFAULT_MIN_INTERVAL
         val fastestInterval = getDouble("fastestIntervalMillis")?.toLong() ?: LocationFGService.DEFAULT_FASTEST_INTERVAL
         val minDistance = getDouble("minUpdateDistanceMeters")?.toFloat() ?: LocationFGService.DEFAULT_MIN_DISTANCE
@@ -87,6 +88,25 @@ class LocationForegroundServicePlugin : Plugin() {
             retryDelayMillis = retryDelay,
             queueCapacity = queueCapacity,
             accuracy = accuracy,
+            targetLocation = targetLocation,
+        )
+    }
+
+    private fun PluginCall.readTargetLocation(): TargetLocation? {
+        val target = getObject("targetLocation") ?: return null
+        if (!target.has("latitude") || !target.has("longitude")) {
+            throw IllegalArgumentException("Debes proporcionar latitude y longitude en targetLocation")
+        }
+
+        val latitude = target.getDouble("latitude")
+        val longitude = target.getDouble("longitude")
+        val providedRange = if (target.has("range")) target.getDouble("range") else LocationFGService.DEFAULT_TARGET_RANGE
+        val range = if (providedRange > 0) providedRange else LocationFGService.DEFAULT_TARGET_RANGE
+
+        return TargetLocation(
+            latitude = latitude,
+            longitude = longitude,
+            rangeMeters = range,
         )
     }
 
@@ -94,7 +114,7 @@ class LocationForegroundServicePlugin : Plugin() {
         val result = mutableMapOf<String, String>()
         val iterator = keys()
         while (iterator.hasNext()) {
-            val key = iterator.next() as? String ?: continue
+            val key = iterator.next()
             if (isNull(key)) {
                 continue
             }

@@ -1,6 +1,18 @@
 export type LocationAccuracy = 'high' | 'balanced';
 
 /**
+ * Ubicación objetivo para detener el servicio cuando el usuario llegue al destino.
+ */
+export interface TargetLocation {
+  /** Latitud del destino. */
+  latitude: number;
+  /** Longitud del destino. */
+  longitude: number;
+  /** Rango en metros para considerar llegada. Valor por defecto: 10. */
+  range?: number;
+}
+
+/**
  * Configuración requerida para iniciar el servicio nativo de rastreo.
  * Todas las propiedades son multiplataforma y deben mantenerse sincronizadas con Android/iOS.
  */
@@ -27,6 +39,11 @@ export interface StartTrackingOptions {
   queueCapacity?: number;
   /** Prioridad deseada para el proveedor de ubicación. */
   accuracy?: LocationAccuracy;
+  /**
+   * Ubicación objetivo opcional. Al llegar dentro del rango se mostrará una alerta
+   * y el servicio se detendrá.
+   */
+  targetLocation?: TargetLocation;
 }
 
 /** Estado mínimo devuelto por los métodos públicos del plugin. */
