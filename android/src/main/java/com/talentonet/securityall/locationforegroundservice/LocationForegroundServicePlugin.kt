@@ -61,6 +61,7 @@ class LocationForegroundServicePlugin : Plugin() {
     private fun PluginCall.toTrackingOptions(): TrackingOptions {
         val endpoint = getString("endpoint")?.takeIf { it.isNotBlank() }
             ?: throw IllegalArgumentException("Debes proporcionar un endpoint válido")
+        val alertTerminationEndpoint = getString("alertTerminationEndpoint")
         val headers = getObject("headers")?.toMap() ?: emptyMap()
         val metadata = getObject("metadata")?.toMap() ?: emptyMap()
         val targetLocation = readTargetLocation()
@@ -78,6 +79,7 @@ class LocationForegroundServicePlugin : Plugin() {
 
         return TrackingOptions(
             endpoint = endpoint,
+            alertTerminationEndpoint = alertTerminationEndpoint,
             headers = headers,
             metadata = metadata,
             minUpdateIntervalMillis = minInterval,

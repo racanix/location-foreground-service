@@ -16,6 +16,7 @@ class LocationForegroundService(context: Context) {
         val intent = Intent(appContext, LocationFGService::class.java).apply {
             action = LocationFGService.ACTION_START
             putExtra(LocationFGService.EXTRA_ENDPOINT, options.endpoint)
+            putExtra(LocationFGService.EXTRA_ALERT_TERMINATION_ENDPOINT, options.alertTerminationEndpoint)
             putExtra(LocationFGService.EXTRA_MIN_INTERVAL, options.minUpdateIntervalMillis)
             putExtra(LocationFGService.EXTRA_FASTEST_INTERVAL, options.fastestIntervalMillis)
             putExtra(LocationFGService.EXTRA_MIN_DISTANCE, options.minUpdateDistanceMeters)
@@ -44,6 +45,7 @@ class LocationForegroundService(context: Context) {
 
 data class TrackingOptions(
     val endpoint: String,
+    val alertTerminationEndpoint: String?,
     val headers: Map<String, String>,
     val metadata: Map<String, String>,
     val minUpdateIntervalMillis: Long,

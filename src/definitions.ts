@@ -19,6 +19,8 @@ export interface TargetLocation {
 export interface StartTrackingOptions {
   /** URL absoluta del endpoint que recibirá las posiciones. */
   endpoint: string;
+  /** URL completa del endpoint para finalizar el viaje (incluye el alertId). */
+  alertTerminationEndpoint?: string;
   /** Encabezados adicionales enviados en cada petición HTTP. */
   headers?: Record<string, string>;
   /** Datos estáticos adjuntos a cada payload (por ejemplo, ids de usuario o dispositivo). */
@@ -41,7 +43,8 @@ export interface StartTrackingOptions {
   accuracy?: LocationAccuracy;
   /**
    * Ubicación objetivo opcional. Al llegar dentro del rango se mostrará una alerta
-   * y el servicio se detendrá.
+   * interactiva para confirmar la llegada. El servicio continuará ejecutándose hasta
+   * que el usuario confirme la llegada.
    */
   targetLocation?: TargetLocation;
 }

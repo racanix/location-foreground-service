@@ -3,6 +3,7 @@ package com.talentonet.securityall.locationforegroundservice
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -70,6 +71,8 @@ class LocationFGService : Service() {
         when (intent?.action) {
             ACTION_START -> handleStartIntent(intent)
             ACTION_STOP -> stopSelf()
+            ACTION_CONFIRM_ARRIVAL -> handleConfirmArrival()
+            ACTION_REJECT_ARRIVAL -> handleRejectArrival()
             else -> Logger.info(TAG, "Comando ignorado: ${intent?.action}")
         }
         return START_STICKY
@@ -94,6 +97,7 @@ class LocationFGService : Service() {
             stopSelf()
             return
         }
+        val alertTerminationEndpoint = intent.getStringExtra(EXTRA_ALERT_TERMINATION_ENDPOINT)
 
         arrivalTriggered.set(false)
 
@@ -118,6 +122,7 @@ class LocationFGService : Service() {
 
         val config = TrackingOptions(
             endpoint = endpoint,
+            alertTerminationEndpoint = alertTerminationEndpoint,
             headers = headers,
             metadata = metadata,
             minUpdateIntervalMillis = minInterval,
@@ -154,10 +159,15 @@ class LocationFGService : Service() {
             override fun onLocationResult(result: LocationResult) {
                 result.locations.forEach { location ->
                     val target = currentConfig?.targetLocation
-                    if (target != null && hasReachedTarget(location, target)) {
-                        handleArrival()
-                        return
+                    if (target != null) {
+                        if (hasReachedTarget(location, target)) {
+                            handleArrival()
+                        } else {
+                            // Si el usuario sale del radio, reseteamos para volver a notificar al reingresar
+                            arrivalTriggered.set(false)
+                        }
                     }
+
                     val payload = LocationPayload(
                         latitude = location.latitude,
                         longitude = location.longitude,
@@ -193,7 +203,6 @@ class LocationFGService : Service() {
             return
         }
         showArrivalAlert()
-        stopSelf()
     }
 
     private fun stopLocationUpdates() {
@@ -312,14 +321,82 @@ class LocationFGService : Service() {
     }
 
     private fun showArrivalAlert() {
+        // PendingIntent para "Sí" (Confirmar llegada)
+        val confirmIntent = Intent(this, LocationFGService::class.java).apply {
+            action = ACTION_CONFIRM_ARRIVAL
+        }
+        val confirmPendingIntent = PendingIntent.getService(
+            this,
+            0,
+            confirmIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // PendingIntent para "No" (Rechazar llegada / continuar)
+        val rejectIntent = Intent(this, LocationFGService::class.java).apply {
+            action = ACTION_REJECT_ARRIVAL
+        }
+        val rejectPendingIntent = PendingIntent.getService(
+            this,
+            1,
+            rejectIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setContentTitle("Destino alcanzado")
-            .setContentText("Haz llegado a tu destino")
+            .setContentText("¿Has llegado a tu destino? Confirma para detener el seguimiento.")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .addAction(0, "Sí", confirmPendingIntent)
+            .addAction(0, "No", rejectPendingIntent)
             .build()
         notificationManager.notify(ARRIVAL_NOTIFICATION_ID, notification)
+    }
+
+    private fun handleRejectArrival() {
+        notificationManager.cancel(ARRIVAL_NOTIFICATION_ID)
+    }
+
+    private fun handleConfirmArrival() {
+        notificationManager.cancel(ARRIVAL_NOTIFICATION_ID)
+        val config = currentConfig ?: return
+        val terminationUrl = config.alertTerminationEndpoint
+        
+        if (terminationUrl.isNullOrBlank()) {
+            Logger.info(TAG, "Confirmación de llegada sin endpoint de finalización, deteniendo servicio.")
+            stopSelf()
+            return
+        }
+
+        scope.launch {
+            try {
+                confirmJourneyCompletion(terminationUrl, config)
+                Logger.info(TAG, "Journey completado exitosamente.")
+            } catch (e: Exception) {
+                Logger.error(TAG, "Error completando journey: ${e.message}", e)
+            } finally {
+                stopSelf()
+            }
+        }
+    }
+
+    private suspend fun confirmJourneyCompletion(url: String, config: TrackingOptions) {
+        val emptyJson = "{}" 
+        val request = Request.Builder()
+            .url(url)
+            .post(emptyJson.toRequestBody(JSON_MEDIA_TYPE))
+            .apply {
+                config.headers.forEach { (key, value) -> addHeader(key, value) }
+            }
+            .build()
+            
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException("HTTP ${response.code} - ${response.message}")
+            }
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -362,7 +439,10 @@ class LocationFGService : Service() {
 
         const val ACTION_START = "com.talentonet.securityall.locationforegroundservice.START"
         const val ACTION_STOP = "com.talentonet.securityall.locationforegroundservice.STOP"
+        const val ACTION_CONFIRM_ARRIVAL = "com.talentonet.securityall.locationforegroundservice.CONFIRM_ARRIVAL"
+        const val ACTION_REJECT_ARRIVAL = "com.talentonet.securityall.locationforegroundservice.REJECT_ARRIVAL"
         const val EXTRA_ENDPOINT = "extra_endpoint"
+        const val EXTRA_ALERT_TERMINATION_ENDPOINT = "extra_alert_termination_endpoint"
         const val EXTRA_HEADERS = "extra_headers"
         const val EXTRA_METADATA = "extra_metadata"
         const val EXTRA_MIN_INTERVAL = "extra_min_interval"
