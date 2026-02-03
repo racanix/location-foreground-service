@@ -36,6 +36,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import com.talentonet.securityall.locationforegroundservice.LocationServiceConstants as Constants
 
 /**
  * Servicio en primer plano responsable de obtener ubicaciones y enviarlas con reintentos.
@@ -62,17 +63,17 @@ class LocationFGService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification(DEFAULT_NOTIFICATION_BODY, DEFAULT_NOTIFICATION_TITLE))
+        startForeground(NOTIFICATION_ID, buildNotification(Constants.DEFAULT_NOTIFICATION_BODY, Constants.DEFAULT_NOTIFICATION_TITLE))
         running.set(true)
         Logger.info(TAG, "Servicio creado")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> handleStartIntent(intent)
-            ACTION_STOP -> stopSelf()
-            ACTION_CONFIRM_ARRIVAL -> handleConfirmArrival()
-            ACTION_REJECT_ARRIVAL -> handleRejectArrival()
+            Constants.ACTION_START -> handleStartIntent(intent)
+            Constants.ACTION_STOP -> stopSelf()
+            Constants.ACTION_CONFIRM_ARRIVAL -> handleConfirmArrival()
+            Constants.ACTION_REJECT_ARRIVAL -> handleRejectArrival()
             else -> Logger.info(TAG, "Comando ignorado: ${intent?.action}")
         }
         return START_STICKY
@@ -91,29 +92,29 @@ class LocationFGService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun handleStartIntent(intent: Intent) {
-        val endpoint = intent.getStringExtra(EXTRA_ENDPOINT)
+        val endpoint = intent.getStringExtra(Constants.EXTRA_ENDPOINT)
         if (endpoint.isNullOrBlank()) {
             Logger.error(TAG, "No se recibió endpoint válido, deteniendo servicio", null)
             stopSelf()
             return
         }
-        val alertTerminationEndpoint = intent.getStringExtra(EXTRA_ALERT_TERMINATION_ENDPOINT)
+        val alertTerminationEndpoint = intent.getStringExtra(Constants.EXTRA_ALERT_TERMINATION_ENDPOINT)
 
         arrivalTriggered.set(false)
 
-        val headers = readSerializableMap(intent, EXTRA_HEADERS)
-        val metadata = readSerializableMap(intent, EXTRA_METADATA)
-        val minInterval = intent.getLongExtra(EXTRA_MIN_INTERVAL, DEFAULT_MIN_INTERVAL)
-        val fastestInterval = intent.getLongExtra(EXTRA_FASTEST_INTERVAL, DEFAULT_FASTEST_INTERVAL)
-        val minDistance = intent.getFloatExtra(EXTRA_MIN_DISTANCE, DEFAULT_MIN_DISTANCE)
-        val notificationTitle = intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: DEFAULT_NOTIFICATION_TITLE
-        val notificationBody = intent.getStringExtra(EXTRA_NOTIFICATION_BODY) ?: DEFAULT_NOTIFICATION_BODY
-        val retryDelay = intent.getLongExtra(EXTRA_RETRY_DELAY, DEFAULT_RETRY_DELAY)
-        val queueCapacity = max(intent.getIntExtra(EXTRA_QUEUE_CAPACITY, DEFAULT_QUEUE_CAPACITY), 1)
-        val accuracy = intent.getStringExtra(EXTRA_ACCURACY)?.let { runCatching { LocationAccuracy.valueOf(it) }.getOrNull() } ?: LocationAccuracy.HIGH
-        val targetLat = intent.getDoubleExtra(EXTRA_TARGET_LAT, Double.NaN)
-        val targetLng = intent.getDoubleExtra(EXTRA_TARGET_LNG, Double.NaN)
-        val targetRange = intent.getDoubleExtra(EXTRA_TARGET_RANGE, DEFAULT_TARGET_RANGE)
+        val headers = readSerializableMap(intent, Constants.EXTRA_HEADERS)
+        val metadata = readSerializableMap(intent, Constants.EXTRA_METADATA)
+        val minInterval = intent.getLongExtra(Constants.EXTRA_MIN_INTERVAL, Constants.DEFAULT_MIN_INTERVAL)
+        val fastestInterval = intent.getLongExtra(Constants.EXTRA_FASTEST_INTERVAL, Constants.DEFAULT_FASTEST_INTERVAL)
+        val minDistance = intent.getFloatExtra(Constants.EXTRA_MIN_DISTANCE, Constants.DEFAULT_MIN_DISTANCE)
+        val notificationTitle = intent.getStringExtra(Constants.EXTRA_NOTIFICATION_TITLE) ?: Constants.DEFAULT_NOTIFICATION_TITLE
+        val notificationBody = intent.getStringExtra(Constants.EXTRA_NOTIFICATION_BODY) ?: Constants.DEFAULT_NOTIFICATION_BODY
+        val retryDelay = intent.getLongExtra(Constants.EXTRA_RETRY_DELAY, Constants.DEFAULT_RETRY_DELAY)
+        val queueCapacity = max(intent.getIntExtra(Constants.EXTRA_QUEUE_CAPACITY, Constants.DEFAULT_QUEUE_CAPACITY), 1)
+        val accuracy = intent.getStringExtra(Constants.EXTRA_ACCURACY)?.let { runCatching { LocationAccuracy.valueOf(it) }.getOrNull() } ?: LocationAccuracy.HIGH
+        val targetLat = intent.getDoubleExtra(Constants.EXTRA_TARGET_LAT, Double.NaN)
+        val targetLng = intent.getDoubleExtra(Constants.EXTRA_TARGET_LNG, Double.NaN)
+        val targetRange = intent.getDoubleExtra(Constants.EXTRA_TARGET_RANGE, Constants.DEFAULT_TARGET_RANGE)
         val targetLocation = if (!targetLat.isNaN() && !targetLng.isNaN()) {
             TargetLocation(targetLat, targetLng, targetRange)
         } else {
@@ -315,7 +316,7 @@ class LocationFGService : Service() {
     }
 
     private fun updateNotification(content: String, title: String? = null) {
-        val resolvedTitle = title ?: currentConfig?.notificationTitle ?: DEFAULT_NOTIFICATION_TITLE
+        val resolvedTitle = title ?: currentConfig?.notificationTitle ?: Constants.DEFAULT_NOTIFICATION_TITLE
         val notification = buildNotification(content, resolvedTitle)
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
@@ -323,7 +324,7 @@ class LocationFGService : Service() {
     private fun showArrivalAlert() {
         // PendingIntent para "Sí" (Confirmar llegada)
         val confirmIntent = Intent(this, LocationFGService::class.java).apply {
-            action = ACTION_CONFIRM_ARRIVAL
+            action = Constants.ACTION_CONFIRM_ARRIVAL
         }
         val confirmPendingIntent = PendingIntent.getService(
             this,
@@ -334,7 +335,7 @@ class LocationFGService : Service() {
 
         // PendingIntent para "No" (Rechazar llegada / continuar)
         val rejectIntent = Intent(this, LocationFGService::class.java).apply {
-            action = ACTION_REJECT_ARRIVAL
+            action = Constants.ACTION_REJECT_ARRIVAL
         }
         val rejectPendingIntent = PendingIntent.getService(
             this,
@@ -365,8 +366,9 @@ class LocationFGService : Service() {
         val terminationUrl = config.alertTerminationEndpoint
         
         if (terminationUrl.isNullOrBlank()) {
-            Logger.info(TAG, "Confirmación de llegada sin endpoint de finalización, deteniendo servicio.")
-            stopSelf()
+            Logger.info(TAG, "Confirmación de llegada sin endpoint de finalización.")
+            // El servicio solo se detien si ya no existen  alarmas.
+            // stopSelf()
             return
         }
 
@@ -377,7 +379,8 @@ class LocationFGService : Service() {
             } catch (e: Exception) {
                 Logger.error(TAG, "Error completando journey: ${e.message}", e)
             } finally {
-                stopSelf()
+                // El servicio solo se detien si ya no existen  alarmas.
+                // stopSelf()
             }
         }
     }
@@ -393,6 +396,7 @@ class LocationFGService : Service() {
             .build()
             
         httpClient.newCall(request).execute().use { response ->
+            // checar si is successful ver cuantas aletas hay, si hay 0 detener el servicio.
             if (!response.isSuccessful) {
                 throw IllegalStateException("HTTP ${response.code} - ${response.message}")
             }
@@ -428,41 +432,12 @@ class LocationFGService : Service() {
         private const val ALERT_CHANNEL_NAME = "Alertas de ubicación"
         private const val NOTIFICATION_ID = 90421
         private const val ARRIVAL_NOTIFICATION_ID = 90422
-        private const val DEFAULT_NOTIFICATION_TITLE = "Ubicación activa"
-        private const val DEFAULT_NOTIFICATION_BODY = "Compartiendo tu ubicación"
         private const val JSON_MEDIA = "application/json; charset=utf-8"
         private val JSON_MEDIA_TYPE = JSON_MEDIA.toMediaType()
         private const val CONNECT_TIMEOUT_SECONDS = 15L
         private const val READ_TIMEOUT_SECONDS = 20L
         private const val WRITE_TIMEOUT_SECONDS = 20L
         private val running = AtomicBoolean(false)
-
-        const val ACTION_START = "com.talentonet.securityall.locationforegroundservice.START"
-        const val ACTION_STOP = "com.talentonet.securityall.locationforegroundservice.STOP"
-        const val ACTION_CONFIRM_ARRIVAL = "com.talentonet.securityall.locationforegroundservice.CONFIRM_ARRIVAL"
-        const val ACTION_REJECT_ARRIVAL = "com.talentonet.securityall.locationforegroundservice.REJECT_ARRIVAL"
-        const val EXTRA_ENDPOINT = "extra_endpoint"
-        const val EXTRA_ALERT_TERMINATION_ENDPOINT = "extra_alert_termination_endpoint"
-        const val EXTRA_HEADERS = "extra_headers"
-        const val EXTRA_METADATA = "extra_metadata"
-        const val EXTRA_MIN_INTERVAL = "extra_min_interval"
-        const val EXTRA_FASTEST_INTERVAL = "extra_fastest_interval"
-        const val EXTRA_MIN_DISTANCE = "extra_min_distance"
-        const val EXTRA_NOTIFICATION_TITLE = "extra_notification_title"
-        const val EXTRA_NOTIFICATION_BODY = "extra_notification_body"
-        const val EXTRA_RETRY_DELAY = "extra_retry_delay"
-        const val EXTRA_QUEUE_CAPACITY = "extra_queue_capacity"
-        const val EXTRA_ACCURACY = "extra_accuracy"
-        const val EXTRA_TARGET_LAT = "extra_target_lat"
-        const val EXTRA_TARGET_LNG = "extra_target_lng"
-        const val EXTRA_TARGET_RANGE = "extra_target_range"
-
-        const val DEFAULT_MIN_INTERVAL = 10_000L
-        const val DEFAULT_FASTEST_INTERVAL = 5_000L
-        const val DEFAULT_MIN_DISTANCE = 5f
-        const val DEFAULT_RETRY_DELAY = 5_000L
-        const val DEFAULT_QUEUE_CAPACITY = 32
-        const val DEFAULT_TARGET_RANGE = 10.0
 
         fun isRunning(): Boolean = running.get()
     }

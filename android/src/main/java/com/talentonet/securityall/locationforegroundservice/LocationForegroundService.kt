@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import java.util.HashMap
+import com.talentonet.securityall.locationforegroundservice.LocationServiceConstants as Constants
 
 /**
  * Fachada utilizada por el plugin para iniciar o detener el servicio nativo.
@@ -14,23 +15,24 @@ class LocationForegroundService(context: Context) {
 
     fun startTracking(options: TrackingOptions) {
         val intent = Intent(appContext, LocationFGService::class.java).apply {
-            action = LocationFGService.ACTION_START
-            putExtra(LocationFGService.EXTRA_ENDPOINT, options.endpoint)
-            putExtra(LocationFGService.EXTRA_ALERT_TERMINATION_ENDPOINT, options.alertTerminationEndpoint)
-            putExtra(LocationFGService.EXTRA_MIN_INTERVAL, options.minUpdateIntervalMillis)
-            putExtra(LocationFGService.EXTRA_FASTEST_INTERVAL, options.fastestIntervalMillis)
-            putExtra(LocationFGService.EXTRA_MIN_DISTANCE, options.minUpdateDistanceMeters)
-            putExtra(LocationFGService.EXTRA_NOTIFICATION_TITLE, options.notificationTitle)
-            putExtra(LocationFGService.EXTRA_NOTIFICATION_BODY, options.notificationBody)
-            putExtra(LocationFGService.EXTRA_RETRY_DELAY, options.retryDelayMillis)
-            putExtra(LocationFGService.EXTRA_QUEUE_CAPACITY, options.queueCapacity)
-            putExtra(LocationFGService.EXTRA_ACCURACY, options.accuracy.name)
-            putExtra(LocationFGService.EXTRA_HEADERS, HashMap(options.headers))
-            putExtra(LocationFGService.EXTRA_METADATA, HashMap(options.metadata))
+            action = Constants.ACTION_START
+            putExtra(Constants.EXTRA_ENDPOINT, options.endpoint)
+            putExtra(Constants.EXTRA_ALERT_TERMINATION_ENDPOINT, options.alertTerminationEndpoint)
+            putExtra(Constants.EXTRA_MIN_INTERVAL, options.minUpdateIntervalMillis)
+            putExtra(Constants.EXTRA_FASTEST_INTERVAL, options.fastestIntervalMillis)
+            putExtra(Constants.EXTRA_MIN_DISTANCE, options.minUpdateDistanceMeters)
+            putExtra(Constants.EXTRA_NOTIFICATION_TITLE, options.notificationTitle)
+            putExtra(Constants.EXTRA_NOTIFICATION_BODY, options.notificationBody)
+            putExtra(Constants.EXTRA_RETRY_DELAY, options.retryDelayMillis)
+            putExtra(Constants.EXTRA_QUEUE_CAPACITY, options.queueCapacity)
+            putExtra(Constants.EXTRA_ACCURACY, options.accuracy.name)
+            putExtra(Constants.EXTRA_HEADERS, HashMap(options.headers))
+            putExtra(Constants.EXTRA_METADATA, HashMap(options.metadata))
+
             options.targetLocation?.let { target ->
-                putExtra(LocationFGService.EXTRA_TARGET_LAT, target.latitude)
-                putExtra(LocationFGService.EXTRA_TARGET_LNG, target.longitude)
-                putExtra(LocationFGService.EXTRA_TARGET_RANGE, target.rangeMeters)
+                putExtra(Constants.EXTRA_TARGET_LAT, target.latitude)
+                putExtra(Constants.EXTRA_TARGET_LNG, target.longitude)
+                putExtra(Constants.EXTRA_TARGET_RANGE, target.rangeMeters)
             }
         }
         ContextCompat.startForegroundService(appContext, intent)

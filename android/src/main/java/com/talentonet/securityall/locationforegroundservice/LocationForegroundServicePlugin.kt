@@ -7,6 +7,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
+import com.talentonet.securityall.locationforegroundservice.LocationServiceConstants as Constants
 
 @CapacitorPlugin(
     name = "LocationForegroundService",
@@ -65,13 +66,13 @@ class LocationForegroundServicePlugin : Plugin() {
         val headers = getObject("headers")?.toMap() ?: emptyMap()
         val metadata = getObject("metadata")?.toMap() ?: emptyMap()
         val targetLocation = readTargetLocation()
-        val minInterval = getDouble("minUpdateIntervalMillis")?.toLong() ?: LocationFGService.DEFAULT_MIN_INTERVAL
-        val fastestInterval = getDouble("fastestIntervalMillis")?.toLong() ?: LocationFGService.DEFAULT_FASTEST_INTERVAL
-        val minDistance = getDouble("minUpdateDistanceMeters")?.toFloat() ?: LocationFGService.DEFAULT_MIN_DISTANCE
+        val minInterval = getDouble("minUpdateIntervalMillis")?.toLong() ?: Constants.DEFAULT_MIN_INTERVAL
+        val fastestInterval = getDouble("fastestIntervalMillis")?.toLong() ?: Constants.DEFAULT_FASTEST_INTERVAL
+        val minDistance = getDouble("minUpdateDistanceMeters")?.toFloat() ?: Constants.DEFAULT_MIN_DISTANCE
         val notificationTitle = getString("notificationTitle") ?: DEFAULT_NOTIFICATION_TITLE
         val notificationBody = getString("notificationBody") ?: DEFAULT_NOTIFICATION_BODY
-        val retryDelay = getDouble("retryDelayMillis")?.toLong() ?: LocationFGService.DEFAULT_RETRY_DELAY
-        val queueCapacity = maxOf(getInt("queueCapacity") ?: LocationFGService.DEFAULT_QUEUE_CAPACITY, 1)
+        val retryDelay = getDouble("retryDelayMillis")?.toLong() ?: Constants.DEFAULT_RETRY_DELAY
+        val queueCapacity = maxOf(getInt("queueCapacity") ?: Constants.DEFAULT_QUEUE_CAPACITY, 1)
         val accuracy = when (getString("accuracy")?.lowercase()) {
             "balanced" -> LocationAccuracy.BALANCED
             else -> LocationAccuracy.HIGH
@@ -102,8 +103,8 @@ class LocationForegroundServicePlugin : Plugin() {
 
         val latitude = target.getDouble("latitude")
         val longitude = target.getDouble("longitude")
-        val providedRange = if (target.has("range")) target.getDouble("range") else LocationFGService.DEFAULT_TARGET_RANGE
-        val range = if (providedRange > 0) providedRange else LocationFGService.DEFAULT_TARGET_RANGE
+        val providedRange = if (target.has("range")) target.getDouble("range") else Constants.DEFAULT_TARGET_RANGE
+        val range = if (providedRange > 0) providedRange else Constants.DEFAULT_TARGET_RANGE
 
         return TargetLocation(
             latitude = latitude,
