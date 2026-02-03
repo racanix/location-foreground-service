@@ -1,6 +1,6 @@
 {
   "name": "location-foreground-service",
-  "version": "0.0.1",
+  "version": "1.0.3",
   "description": "location",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
