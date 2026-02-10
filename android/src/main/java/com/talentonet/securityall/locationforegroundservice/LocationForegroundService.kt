@@ -28,12 +28,6 @@ class LocationForegroundService(context: Context) {
             putExtra(Constants.EXTRA_ACCURACY, options.accuracy.name)
             putExtra(Constants.EXTRA_HEADERS, HashMap(options.headers))
             putExtra(Constants.EXTRA_METADATA, HashMap(options.metadata))
-
-            options.targetLocation?.let { target ->
-                putExtra(Constants.EXTRA_TARGET_LAT, target.latitude)
-                putExtra(Constants.EXTRA_TARGET_LNG, target.longitude)
-                putExtra(Constants.EXTRA_TARGET_RANGE, target.rangeMeters)
-            }
         }
         ContextCompat.startForegroundService(appContext, intent)
     }
@@ -58,8 +52,20 @@ data class TrackingOptions(
     val retryDelayMillis: Long,
     val queueCapacity: Int,
     val accuracy: LocationAccuracy,
+)
+
+data class Alert(
+    val id: String,
+    val type: AlertType,
     val targetLocation: TargetLocation?,
 )
+
+enum class AlertType {
+    JOURNEY,
+    QUICK,
+    REQUEST_LOCATION,
+    DEFAULT
+}
 
 data class TargetLocation(
     val latitude: Double,

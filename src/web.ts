@@ -1,6 +1,8 @@
 import { WebPlugin } from '@capacitor/core';
 
 import type {
+  Alert,
+  AlertType,
   IsTrackingResult,
   LocationForegroundServicePlugin,
   StartTrackingOptions,
@@ -22,5 +24,33 @@ export class LocationForegroundServiceWeb extends WebPlugin implements LocationF
 
   async isTracking(): Promise<IsTrackingResult> {
     return { running: false };
+  }
+
+  async addAlert(_alert: Alert): Promise<{ success: boolean }> {
+    throw this.unimplemented('La gestión de alertas no está disponible en web.');
+  }
+
+  async removeAlert(_options: { id: string }): Promise<{ success: boolean }> {
+    throw this.unimplemented('La gestión de alertas no está disponible en web.');
+  }
+
+  async existsAlert(_options: { id: string }): Promise<{ alert: Alert | null }> {
+    throw this.unimplemented('La gestión de alertas no está disponible en web.');
+  }
+
+  async getAllAlerts(): Promise<{ alerts: Alert[] }> {
+    throw this.unimplemented('La gestión de alertas no está disponible en web.');
+  }
+
+  async existAlertType(_options: { type: AlertType }): Promise<{ exists: boolean }> {
+    throw this.unimplemented('La gestión de alertas no está disponible en web.');
+  }
+
+  async getAlertCount(): Promise<{ count: number }> {
+    throw this.unimplemented('La gestión de alertas no está disponible en web.');
+  }
+
+  async clearAllAlerts(): Promise<{ success: boolean }> {
+    throw this.unimplemented('La gestión de alertas no está disponible en web.');
   }
 }

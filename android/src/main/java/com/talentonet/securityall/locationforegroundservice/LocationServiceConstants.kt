@@ -27,6 +27,7 @@ object LocationServiceConstants {
     const val EXTRA_TARGET_LAT = "com.talentonet.securityall.extra.TARGET_LAT"
     const val EXTRA_TARGET_LNG = "com.talentonet.securityall.extra.TARGET_LNG"
     const val EXTRA_TARGET_RANGE = "com.talentonet.securityall.extra.TARGET_RANGE"
+    const val EXTRA_CONFIRM_ARRIVAL_ALERT_ID = "com.talentonet.securityall.extra.CONFIRM_ARRIVAL_ALERT_ID"
 
     // Defaults
     const val DEFAULT_MIN_INTERVAL = 10_000L

@@ -20,10 +20,134 @@ import com.talentonet.securityall.locationforegroundservice.LocationServiceConst
 class LocationForegroundServicePlugin : Plugin() {
 
     private lateinit var implementation: LocationForegroundService
+    private lateinit var alertManager: AlertManager
 
     override fun load() {
         super.load()
+        alertManager = AlertManager(context.applicationContext)
         implementation = LocationForegroundService(context.applicationContext)
+    }
+
+    @PluginMethod
+    fun addAlert(call: PluginCall) {
+        try {
+            val id = call.getString("id")
+            if (id.isNullOrBlank()) {
+                call.reject("El id de la alerta es obligatorio")
+                return
+            }
+
+            val typeStr = call.getString("type") ?: "DEFAULT"
+            val type = try {
+                AlertType.valueOf(typeStr)
+            } catch (e: Exception) {
+                AlertType.DEFAULT
+            }
+
+            val targetObj = call.getObject("targetLocation")
+            val target = if (targetObj != null) parseTargetLocation(targetObj) else null
+
+            val alert = Alert(id, type, target)
+            val success = alertManager.add(alert)
+            val ret = JSObject().apply { put("success", success) }
+            call.resolve(ret)
+        } catch (e: Exception) {
+            call.reject("Error al agregar alerta: ${e.message}")
+        }
+    }
+
+    @PluginMethod
+    fun removeAlert(call: PluginCall) {
+        val id = call.getString("id")
+        if (id.isNullOrBlank()) {
+            call.reject("El id es obligatorio")
+            return
+        }
+        val success = alertManager.remove(id)
+        val ret = JSObject().apply { put("success", success) }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun existsAlert(call: PluginCall) {
+        val id = call.getString("id")
+        if (id.isNullOrBlank()) {
+            call.reject("El id es obligatorio")
+            return
+        }
+        val alert = alertManager.exists(id)
+        if (alert == null) {
+            val ret = JSObject().apply { put("alert", null) }
+            call.resolve(ret)
+        } else {
+            val ret = JSObject().apply {
+                val jsonAlert = JSObject()
+                jsonAlert.put("id", alert.id)
+                jsonAlert.put("type", alert.type.name)
+                alert.targetLocation?.let { t ->
+                    val tJson = JSObject()
+                    tJson.put("latitude", t.latitude)
+                    tJson.put("longitude", t.longitude)
+                    tJson.put("range", t.rangeMeters)
+                    jsonAlert.put("targetLocation", tJson)
+                }
+                put("alert", jsonAlert)
+            }
+            call.resolve(ret)
+        }
+    }
+
+    @PluginMethod
+    fun getAllAlerts(call: PluginCall) {
+        val alerts = alertManager.getAll()
+        val ret = JSObject()
+        val alertsArray = alerts.map { alert ->
+            val jsonAlert = JSObject()
+            jsonAlert.put("id", alert.id)
+            jsonAlert.put("type", alert.type.name)
+            alert.targetLocation?.let { t ->
+                val tJson = JSObject()
+                tJson.put("latitude", t.latitude)
+                tJson.put("longitude", t.longitude)
+                tJson.put("range", t.rangeMeters)
+                jsonAlert.put("targetLocation", tJson)
+            }
+            jsonAlert
+        }
+        ret.put("alerts", alertsArray)
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun existAlertType(call: PluginCall) {
+        val typeStr = call.getString("type")
+        if (typeStr.isNullOrBlank()) {
+            call.reject("El tipo es obligatorio")
+            return
+        }
+        val type = try {
+            AlertType.valueOf(typeStr)
+        } catch (e: Exception) {
+            call.reject("Tipo inválido")
+            return
+        }
+        val exists = alertManager.existAlertType(type)
+        val ret = JSObject().apply { put("exists", exists) }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun getAlertCount(call: PluginCall) {
+        val count = alertManager.count()
+        val ret = JSObject().apply { put("count", count) }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun clearAllAlerts(call: PluginCall) {
+        val success = alertManager.clearAll()
+        val ret = JSObject().apply { put("success", success) }
+        call.resolve(ret)
     }
 
     @PluginMethod
@@ -65,7 +189,6 @@ class LocationForegroundServicePlugin : Plugin() {
         val alertTerminationEndpoint = getString("alertTerminationEndpoint")
         val headers = getObject("headers")?.toMap() ?: emptyMap()
         val metadata = getObject("metadata")?.toMap() ?: emptyMap()
-        val targetLocation = readTargetLocation()
         val minInterval = getDouble("minUpdateIntervalMillis")?.toLong() ?: Constants.DEFAULT_MIN_INTERVAL
         val fastestInterval = getDouble("fastestIntervalMillis")?.toLong() ?: Constants.DEFAULT_FASTEST_INTERVAL
         val minDistance = getDouble("minUpdateDistanceMeters")?.toFloat() ?: Constants.DEFAULT_MIN_DISTANCE
@@ -91,16 +214,10 @@ class LocationForegroundServicePlugin : Plugin() {
             retryDelayMillis = retryDelay,
             queueCapacity = queueCapacity,
             accuracy = accuracy,
-            targetLocation = targetLocation,
         )
     }
 
-    private fun PluginCall.readTargetLocation(): TargetLocation? {
-        val target = getObject("targetLocation") ?: return null
-        if (!target.has("latitude") || !target.has("longitude")) {
-            throw IllegalArgumentException("Debes proporcionar latitude y longitude en targetLocation")
-        }
-
+    private fun parseTargetLocation(target: JSObject): TargetLocation {
         val latitude = target.getDouble("latitude")
         val longitude = target.getDouble("longitude")
         val providedRange = if (target.has("range")) target.getDouble("range") else Constants.DEFAULT_TARGET_RANGE

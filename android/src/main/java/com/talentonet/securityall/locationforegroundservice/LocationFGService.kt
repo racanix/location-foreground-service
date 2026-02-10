@@ -23,6 +23,7 @@ import java.util.HashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
+import kotlin.text.replace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,6 +32,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+// import kotlinx.coroutines.invokeOnCompletion
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -52,19 +54,15 @@ class LocationFGService : Service() {
     private var flushJob: Job? = null
     private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
     private val arrivalTriggered = AtomicBoolean(false)
-    private val httpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .build()
-    }
+    private var transmitter: LocationTransmitter? = null
+    private lateinit var alertManager: AlertManager
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification(Constants.DEFAULT_NOTIFICATION_BODY, Constants.DEFAULT_NOTIFICATION_TITLE))
         running.set(true)
+        alertManager = AlertManager(this)
         Logger.info(TAG, "Servicio creado")
     }
 
@@ -72,7 +70,7 @@ class LocationFGService : Service() {
         when (intent?.action) {
             Constants.ACTION_START -> handleStartIntent(intent)
             Constants.ACTION_STOP -> stopSelf()
-            Constants.ACTION_CONFIRM_ARRIVAL -> handleConfirmArrival()
+            Constants.ACTION_CONFIRM_ARRIVAL -> handleConfirmArrival(intent?.getStringExtra(Constants.EXTRA_CONFIRM_ARRIVAL_ALERT_ID))
             Constants.ACTION_REJECT_ARRIVAL -> handleRejectArrival()
             else -> Logger.info(TAG, "Comando ignorado: ${intent?.action}")
         }
@@ -82,6 +80,9 @@ class LocationFGService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         stopLocationUpdates()
+        scope.launch {
+            transmitter?.shutdown()
+        }
         scope.cancel()
         flushJob?.cancel()
         synchronized(queueLock) { pendingPayloads.clear() }
@@ -100,8 +101,6 @@ class LocationFGService : Service() {
         }
         val alertTerminationEndpoint = intent.getStringExtra(Constants.EXTRA_ALERT_TERMINATION_ENDPOINT)
 
-        arrivalTriggered.set(false)
-
         val headers = readSerializableMap(intent, Constants.EXTRA_HEADERS)
         val metadata = readSerializableMap(intent, Constants.EXTRA_METADATA)
         val minInterval = intent.getLongExtra(Constants.EXTRA_MIN_INTERVAL, Constants.DEFAULT_MIN_INTERVAL)
@@ -112,14 +111,6 @@ class LocationFGService : Service() {
         val retryDelay = intent.getLongExtra(Constants.EXTRA_RETRY_DELAY, Constants.DEFAULT_RETRY_DELAY)
         val queueCapacity = max(intent.getIntExtra(Constants.EXTRA_QUEUE_CAPACITY, Constants.DEFAULT_QUEUE_CAPACITY), 1)
         val accuracy = intent.getStringExtra(Constants.EXTRA_ACCURACY)?.let { runCatching { LocationAccuracy.valueOf(it) }.getOrNull() } ?: LocationAccuracy.HIGH
-        val targetLat = intent.getDoubleExtra(Constants.EXTRA_TARGET_LAT, Double.NaN)
-        val targetLng = intent.getDoubleExtra(Constants.EXTRA_TARGET_LNG, Double.NaN)
-        val targetRange = intent.getDoubleExtra(Constants.EXTRA_TARGET_RANGE, Constants.DEFAULT_TARGET_RANGE)
-        val targetLocation = if (!targetLat.isNaN() && !targetLng.isNaN()) {
-            TargetLocation(targetLat, targetLng, targetRange)
-        } else {
-            null
-        }
 
         val config = TrackingOptions(
             endpoint = endpoint,
@@ -134,17 +125,23 @@ class LocationFGService : Service() {
             retryDelayMillis = retryDelay,
             queueCapacity = queueCapacity,
             accuracy = accuracy,
-            targetLocation = targetLocation,
         )
 
         currentConfig = config
-        updateNotification(notificationBody, notificationTitle)
-        restartLocationUpdates(config)
-        flushQueue()
-        Logger.info(TAG, "Servicio iniciado")
+
+        scope.launch {
+            transmitter?.shutdown()
+            transmitter = WebSocketLocationTransmitter(scope)
+            transmitter?.initialize(config)
+
+            updateNotification(notificationBody, notificationTitle)
+            startLocationUpdates(config)
+            flushQueue()
+            Logger.info(TAG, "Servicio iniciado")
+        }
     }
 
-    private fun restartLocationUpdates(config: TrackingOptions) {
+    private fun startLocationUpdates(config: TrackingOptions) {
         stopLocationUpdates()
         val priority = when (config.accuracy) {
             LocationAccuracy.HIGH -> Priority.PRIORITY_HIGH_ACCURACY
@@ -159,13 +156,27 @@ class LocationFGService : Service() {
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.locations.forEach { location ->
-                    val target = currentConfig?.targetLocation
-                    if (target != null) {
-                        if (hasReachedTarget(location, target)) {
-                            handleArrival()
-                        } else {
-                            // Si el usuario sale del radio, reseteamos para volver a notificar al reingresar
-                            arrivalTriggered.set(false)
+                    Logger.info(TAG, "Nueva ubicación recibida: $location")
+                    val alerts = alertManager.getAll()
+
+                    if (alerts.isEmpty()) {
+                        Logger.info(TAG, "No hay alertas activas, deteniendo servicio.")
+                        stopSelf()
+                        return@forEach
+                    }
+
+                    if (alertManager.existAlertType(AlertType.JOURNEY)) {
+                        val journeyAlert = alerts.filter { it.type == AlertType.JOURNEY && it.targetLocation != null }.firstOrNull()
+                        if (journeyAlert != null) {
+                            val target = journeyAlert.targetLocation!!
+                            if (hasReachedTarget(location, target)) {
+                                Logger.info(TAG, "Usuario llegó al radio objetivo para alerta JOURNEY ${journeyAlert.id}")
+                                handleArrival(journeyAlert.id)
+                            } else {
+                                Logger.info(TAG, "Usuario salió del radio objetivo, reseteando alerta de llegada")
+                                // Si el usuario sale del radio, reseteamos para volver a notificar al reingresar
+                                arrivalTriggered.set(false)
+                            }
                         }
                     }
 
@@ -178,6 +189,7 @@ class LocationFGService : Service() {
                         bearing = location.bearing,
                         timestamp = System.currentTimeMillis(),
                     )
+                    Logger.info(TAG, "Encolando nueva ubicación: $payload")
                     enqueuePayload(payload)
                 }
             }
@@ -199,11 +211,11 @@ class LocationFGService : Service() {
         return distance.first().toDouble() <= target.rangeMeters
     }
 
-    private fun handleArrival() {
+    private fun handleArrival(alertId: String) {
         if (!arrivalTriggered.compareAndSet(false, true)) {
             return
         }
-        showArrivalAlert()
+        showArrivalAlert(alertId)
     }
 
     private fun stopLocationUpdates() {
@@ -227,64 +239,38 @@ class LocationFGService : Service() {
             return
         }
         flushJob = scope.launch {
-            while (isActive) {
-                val config = currentConfig ?: break
-                val next = synchronized(queueLock) {
-                    if (pendingPayloads.isEmpty()) {
-                        return@launch
+            val transmitter = this@LocationFGService.transmitter ?: return@launch
+
+            // Observar el estado de la conexión para pausar/reanudar el envío
+            transmitter.isConnected.collect { isConnected ->
+                if (!isConnected) {
+                    Logger.info(TAG, "Transmisor desconectado, pausando envíos.")
+                    return@collect
+                }
+
+                Logger.info(TAG, "Transmisor conectado, procesando cola...")
+                while (isActive && transmitter.isConnected.value) {
+                    val config = currentConfig ?: break
+                    val payload = synchronized(queueLock) { pendingPayloads.peekFirst() }
+                    if (payload == null) {
+                        Logger.info(TAG, "Cola vacía, esperando nuevas ubicaciones.")
+                        delay(5000L)
+                        continue
                     }
-                    pendingPayloads.first()
+
+                    val success = transmitter.send(payload, config)
+                    if (success) {
+                        synchronized(queueLock) { pendingPayloads.removeFirst() }
+                        val remaining = synchronized(queueLock) { pendingPayloads.size }
+                        updateNotification("Enviando ubicaciones (${remaining} pendientes)", config.notificationTitle)
+                        Logger.info(TAG, "Ubicación enviada exitosamente, ${remaining} pendientes en cola.")
+                    } else {
+                        Logger.info(TAG, "Fallo al enviar ubicación, reintentando en ${config.retryDelayMillis}ms")
+                        delay(config.retryDelayMillis)
+                    }
                 }
-                try {
-                    sendPayload(next, config)
-                    synchronized(queueLock) { pendingPayloads.removeFirst() }
-                    val remaining = synchronized(queueLock) { pendingPayloads.size }
-                    updateNotification("Enviando ubicaciones (${remaining} pendientes)", config.notificationTitle)
-                } catch (error: Throwable) {
-                    Logger.error(TAG, "Fallo al enviar ubicación mensaje: ${error.message} causa: ${error.localizedMessage}", error)
-                    delay(config.retryDelayMillis)
-                }
             }
         }
-    }
-
-    private fun sendPayload(payload: LocationPayload, config: TrackingOptions) {
-        val json = payload.toJson(config.metadata)
-        val request = Request.Builder()
-            .url(config.endpoint)
-            .post(json.toRequestBody(JSON_MEDIA_TYPE))
-            .apply {
-                config.headers.forEach { (key, value) -> addHeader(key, value) }
-            }
-            .build()
-
-        httpClient.newCall(request).execute().use { response ->
-            Logger.info(TAG, "Informacion de respuesta >  ${response.body?.string()} ${response}")
-            if (!response.isSuccessful) {
-                throw IllegalStateException("HTTP ${response.code}")
-            }
-        }
-    }
-
-    private fun LocationPayload.toJson(metadata: Map<String, String>): String {
-        val location = JSONObject()
-        location.put("lat", latitude)
-        location.put("lng", longitude)
-        location.put("accuracy", accuracy)
-        location.put("altitude", altitude)
-        location.put("speed", speed)
-        location.put("bearing", bearing)
-
-        val json = JSONObject()
-        json.put("location", location)
-        json.put("timestamp", timestamp)
-        
-        if (metadata.isNotEmpty()) {
-            val extras = JSONObject()
-            metadata.forEach { (key, value) -> extras.put(key, value) }
-            json.put("metadata", extras)
-        }
-        return json.toString()
     }
 
     private fun createNotificationChannel() {
@@ -321,10 +307,11 @@ class LocationFGService : Service() {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun showArrivalAlert() {
+    private fun showArrivalAlert(alertId: String) {
         // PendingIntent para "Sí" (Confirmar llegada)
         val confirmIntent = Intent(this, LocationFGService::class.java).apply {
             action = Constants.ACTION_CONFIRM_ARRIVAL
+            putExtra(Constants.EXTRA_CONFIRM_ARRIVAL_ALERT_ID, alertId)
         }
         val confirmPendingIntent = PendingIntent.getService(
             this,
@@ -360,7 +347,7 @@ class LocationFGService : Service() {
         notificationManager.cancel(ARRIVAL_NOTIFICATION_ID)
     }
 
-    private fun handleConfirmArrival() {
+    private fun handleConfirmArrival(alertId: String?) {
         notificationManager.cancel(ARRIVAL_NOTIFICATION_ID)
         val config = currentConfig ?: return
         val terminationUrl = config.alertTerminationEndpoint
@@ -372,13 +359,19 @@ class LocationFGService : Service() {
             return
         }
 
+        if (alertId.isNullOrBlank()) {
+            Logger.info(TAG, "Confirmación de llegada sin ID de alerta, no se puede completar el journey.")
+            return
+        }
+
         scope.launch {
             try {
-                confirmJourneyCompletion(terminationUrl, config)
+                confirmJourneyCompletion(terminationUrl.replace("#param#", alertId), config)
                 Logger.info(TAG, "Journey completado exitosamente.")
             } catch (e: Exception) {
                 Logger.error(TAG, "Error completando journey: ${e.message}", e)
             } finally {
+                alertManager.remove(alertId)
                 // El servicio solo se detien si ya no existen  alarmas.
                 // stopSelf()
             }
@@ -395,7 +388,7 @@ class LocationFGService : Service() {
             }
             .build()
             
-        httpClient.newCall(request).execute().use { response ->
+        OkHttpClient().newCall(request).execute().use { response ->
             // checar si is successful ver cuantas aletas hay, si hay 0 detener el servicio.
             if (!response.isSuccessful) {
                 throw IllegalStateException("HTTP ${response.code} - ${response.message}")
