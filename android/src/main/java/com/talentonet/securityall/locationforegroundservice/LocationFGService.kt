@@ -60,19 +60,32 @@ class LocationFGService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification(Constants.DEFAULT_NOTIFICATION_BODY, Constants.DEFAULT_NOTIFICATION_TITLE))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(
+                Constants.DEFAULT_NOTIFICATION_BODY,
+                Constants.DEFAULT_NOTIFICATION_TITLE
+            )
+        )
         running.set(true)
         alertManager = AlertManager(this)
         Logger.info(TAG, "Servicio creado")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null) {
+            // Puede ocurrir cuando el sistema relanza el servicio (START_STICKY)
+            // y no hay un Intent explícito asociado.
+            Logger.info(TAG, "onStartCommand recibido con intent null")
+            return START_STICKY
+        }
+
+        when (intent.action) {
             Constants.ACTION_START -> handleStartIntent(intent)
             Constants.ACTION_STOP -> stopSelf()
-            Constants.ACTION_CONFIRM_ARRIVAL -> handleConfirmArrival(intent?.getStringExtra(Constants.EXTRA_CONFIRM_ARRIVAL_ALERT_ID))
+            Constants.ACTION_CONFIRM_ARRIVAL -> handleConfirmArrival(intent.getStringExtra(Constants.EXTRA_CONFIRM_ARRIVAL_ALERT_ID))
             Constants.ACTION_REJECT_ARRIVAL -> handleRejectArrival()
-            else -> Logger.info(TAG, "Comando ignorado: ${intent?.action}")
+            else -> Logger.info(TAG, "Comando ignorado: ${intent.action}")
         }
         return START_STICKY
     }
@@ -93,6 +106,12 @@ class LocationFGService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun handleStartIntent(intent: Intent) {
+
+        if (isAlreadyRunning()) {
+            Logger.info(TAG, "Servicio ya estaba en ejecución con la misma configuración. Ignorando ACTION_START.")
+            return
+        }
+
         val endpoint = intent.getStringExtra(Constants.EXTRA_ENDPOINT)
         if (endpoint.isNullOrBlank()) {
             Logger.error(TAG, "No se recibió endpoint válido, deteniendo servicio", null)
@@ -139,6 +158,10 @@ class LocationFGService : Service() {
             flushQueue()
             Logger.info(TAG, "Servicio iniciado")
         }
+    }
+
+    private fun isAlreadyRunning(): Boolean {
+        return running.get() && transmitter?.isConnected?.value == true
     }
 
     private fun startLocationUpdates(config: TrackingOptions) {
